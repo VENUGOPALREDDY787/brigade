@@ -1,17 +1,16 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 
 let mainWindow = null;
 
-// Request single instance lock to prevent "Access is denied" cache conflicts
+// Request single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  // If another instance is already running, quit this one immediately
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Focus the existing window if a user tries to launch a second one
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
@@ -22,7 +21,6 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createWindow();
 
-    // Toggle shortcut
     const ret = globalShortcut.register('CommandOrControl+Shift+Space', () => {
       toggleWindow();
     });
@@ -71,6 +69,29 @@ function toggleWindow() {
     mainWindow.focus();
   }
 }
+
+// IPC listener to execute the actual local Brigade CLI dynamically
+ipcMain.on('run-brigade-cli', (event, query) => {
+  console.log(`Executing Brigade CLI for query: "${query}"`);
+  
+  // Spawn "node brigade.mjs agent -m <query>" inside the brigade directory
+  const child = spawn('node', ['brigade.mjs', 'agent', '-m', query], {
+    cwd: 'D:\\saas\\BRIGADE DESKTOP\\brigade',
+    env: { ...process.env, FORCE_COLOR: '1' } // Force color output if supported
+  });
+
+  child.stdout.on('data', (data) => {
+    event.sender.send('cli-stream-chunk', data.toString());
+  });
+
+  child.stderr.on('data', (data) => {
+    event.sender.send('cli-stream-chunk', data.toString()); // Pipe stderr too in case of info logs
+  });
+
+  child.on('close', (code) => {
+    event.sender.send('cli-stream-done', code);
+  });
+});
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();

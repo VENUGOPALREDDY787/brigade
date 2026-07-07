@@ -46,6 +46,7 @@ let currentAgentScope = 'all'; // 'all', 'research', 'coding', 'tideline'
 // Simulation Timers (to cancel them on "Stop Workers")
 let simulationTimers = [];
 let activeSimulationAction = null;
+let isCliRunning = false;
 
 // Simulated Desktop environments & focus states
 const apps = ['Google Chrome', 'VS Code', 'Command Prompt / Terminal'];
@@ -400,26 +401,23 @@ function runDemoSimulation(item) {
   appendChatBubble('user', `Query crew: "${item.title}"`);
   
   if (item.action === 'whatsapp-book') {
-    // Launch the advanced WhatsApp simulation flow!
     runWhatsAppSimulation();
     return;
   }
   
   // Simulated Agent Stream bubble for default simulations
   setTimeout(() => {
-    if (activeSimulationAction !== item.action) return; // cancelled
+    if (activeSimulationAction !== item.action) return;
     
     const responseText = getSimulatedResponse(item.action);
     const bubble = appendChatBubble('agent', '');
     
-    // Light up lead agent card
     cardLead.classList.add('active-run');
     statusLead.textContent = 'RUNNING';
     statusLead.className = 'worker-status status-running';
     logConsole('lead-agent', `Initiated task: "${item.title}"`, 'lead');
     
     typewriterEffect(bubble, responseText, () => {
-      // Show approval gating panel after streaming response completes
       cardLead.classList.remove('active-run');
       statusLead.textContent = 'IDLE';
       statusLead.className = 'worker-status status-idle';
@@ -439,13 +437,99 @@ function runDemoSimulation(item) {
   }, 500);
 }
 
+// Spawns and executes the actual Brigade CLI on the user's machine (DYNAMIC FLOW)
+function runRealBrigadeCLI(queryText) {
+  stopAllSimulationWorkers();
+  isCliRunning = true;
+  
+  suggestionList.style.display = 'none';
+  chatContainer.style.display = 'flex';
+  chatContainer.innerHTML = '';
+  
+  appendChatBubble('user', queryText);
+  const bubble = appendChatBubble('agent', '<p><em>Spawning local Brigade CLI process...</em></p>');
+  
+  // Update status card
+  resetWorkerCards();
+  cardLead.classList.add('active-run');
+  statusLead.textContent = 'RUNNING';
+  statusLead.className = 'worker-status status-running';
+  
+  logConsole('system', `Executing terminal bridge: "node brigade.mjs agent -m '${queryText}'"`, 'system');
+  logConsole('lead-agent', 'Invoking local AI model settings...', 'lead');
+
+  // Trigger IPC execution call
+  ipcRenderer.send('run-brigade-cli', queryText);
+}
+
+// Clean ANSI color codes from incoming log streams
+function cleanAnsiCodes(text) {
+  return text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+}
+
+// Listen for CLI output chunks and pipe them dynamically to the chat view in real-time
+ipcRenderer.on('cli-stream-chunk', (event, chunk) => {
+  if (!isCliRunning) return;
+  
+  const lastBubble = chatContainer.lastElementChild.querySelector('.chat-bubble-content');
+  
+  // Clean logs and parse formatting
+  const cleanChunk = cleanAnsiCodes(chunk);
+  
+  // Append text and auto-scroll
+  if (lastBubble.querySelector('p')) {
+    // If it already has html structure, append to a pre formatted container
+    let pre = lastBubble.querySelector('pre');
+    if (!pre) {
+      pre = document.createElement('pre');
+      lastBubble.appendChild(pre);
+    }
+    pre.textContent += cleanChunk;
+  } else {
+    // Replace the default loader text
+    lastBubble.innerHTML = `<p><strong>[brigade-cli]</strong> Executing agent loop:</p><pre>${cleanChunk}</pre>`;
+  }
+  
+  // Parse logs to update status badges dynamically!
+  if (cleanChunk.includes('Delegating') || cleanChunk.includes('sub-agent')) {
+    cardResearch.classList.add('active-run');
+    statusResearch.textContent = 'DELEGATED';
+    statusResearch.className = 'worker-status status-running';
+    logConsole('lead-agent', 'Delegating subtasks to research-agent...', 'lead');
+  }
+  if (cleanChunk.includes('Tideline') || cleanChunk.includes('Memory')) {
+    logConsole('tideline-memory', 'Syncing fact recall loops...', 'tideline');
+  }
+  
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+});
+
+// Listen for CLI completion
+ipcRenderer.on('cli-stream-done', (event, code) => {
+  isCliRunning = false;
+  
+  cardLead.classList.remove('active-run');
+  cardResearch.classList.remove('active-run');
+  
+  if (code === 0) {
+    statusLead.textContent = 'SUCCESS';
+    statusLead.className = 'worker-status status-success';
+    statusResearch.textContent = 'SUCCESS';
+    statusResearch.className = 'worker-status status-success';
+    logConsole('system', 'Brigade CLI process completed successfully (Exit code: 0).', 'system');
+  } else {
+    statusLead.textContent = 'ERROR';
+    statusLead.className = 'worker-status status-stopped';
+    logConsole('system', `Brigade CLI process exited with error code: ${code}.`, 'error');
+  }
+});
+
 // Advanced WhatsApp Multi-Agent Simulation workflow
 function runWhatsAppSimulation() {
   resetWorkerCards();
   consoleLogs.innerHTML = '';
   logConsole('system', 'Starting WhatsApp multi-agent crew execution loop...', 'system');
   
-  // Step 1: Lead agent parses instruction
   const t1 = setTimeout(() => {
     cardLead.classList.add('active-run');
     statusLead.textContent = 'RUNNING';
@@ -454,7 +538,6 @@ function runWhatsAppSimulation() {
   }, 800);
   simulationTimers.push(t1);
 
-  // Step 2: Lead delegates to WhatsApp agent
   const t2 = setTimeout(() => {
     cardLead.classList.remove('active-run');
     statusLead.textContent = 'DELEGATED';
@@ -468,7 +551,6 @@ function runWhatsAppSimulation() {
   }, 2200);
   simulationTimers.push(t2);
 
-  // Step 3: WhatsApp agent queries Tideline Memory
   const t3 = setTimeout(() => {
     cardResearch.classList.add('active-run');
     statusResearch.textContent = 'QUERYING';
@@ -478,7 +560,6 @@ function runWhatsAppSimulation() {
   }, 3800);
   simulationTimers.push(t3);
 
-  // Step 4: Tideline Memory returns John's contact info
   const t4 = setTimeout(() => {
     cardResearch.classList.remove('active-run');
     statusResearch.textContent = 'IDLE';
@@ -488,7 +569,6 @@ function runWhatsAppSimulation() {
   }, 5200);
   simulationTimers.push(t4);
 
-  // Step 5: WhatsApp agent drafts message and requests approval
   const t5 = setTimeout(() => {
     cardWhatsapp.classList.remove('active-run');
     statusWhatsapp.textContent = 'WAITING';
@@ -498,7 +578,6 @@ function runWhatsAppSimulation() {
     logConsole('whatsapp-agent', 'Security policy rule wacli-message-approval requires user confirmation.', 'whatsapp');
     logConsole('system', 'Execution paused. Waiting for operator approval...', 'system');
     
-    // Trigger approval panel
     showApprovalPanel('whatsapp send --to "+91 98765 43210" --msg "Hi John, could you please return my book?"');
   }, 6800);
   simulationTimers.push(t5);
@@ -532,7 +611,6 @@ function approveWhatsAppMessage() {
     statusLead.className = 'worker-status status-success';
     logConsole('system', 'Workflow successfully completed. All subagents terminated cleanly.', 'system');
     
-    // Show final response bubble in chat container
     const bubble = appendChatBubble('agent', '');
     typewriterEffect(bubble, `
       <p style="color: var(--accent-emerald)"><strong>✔ WhatsApp Message Sent</strong></p>
@@ -544,12 +622,13 @@ function approveWhatsAppMessage() {
   simulationTimers.push(t2);
 }
 
-// Stop all running simulations and set status to stopped (Stop Worker implementation)
+// Stop all running simulations and set status to stopped
 function stopAllSimulationWorkers() {
   // Clear all running setTimeout timers
   simulationTimers.forEach(timer => clearTimeout(timer));
   simulationTimers = [];
   activeSimulationAction = null;
+  isCliRunning = false;
   
   // Hide approval panel
   approvalPanel.style.display = 'none';
@@ -859,10 +938,8 @@ searchInput.addEventListener('keydown', (e) => {
       if (isLiveMode) {
         sendQueryToGateway(queryText);
       } else {
-        runDemoSimulation({
-          title: queryText,
-          action: 'whatsapp-book' // default to the advanced whatsapp flow for type-ins
-        });
+        // Run actual local Brigade CLI dynamically if they type a custom query
+        runRealBrigadeCLI(queryText);
       }
     }
   }
