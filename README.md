@@ -58,6 +58,7 @@ backend — all under one `~/.brigade/` directory you fully own.
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
 - [Features](#features)
+- [Shadow Partner: Desktop GUI](#shadow-partner-desktop-gui)
 - [CLI reference](#cli-reference)
 - [In-chat commands](#in-chat-commands)
 - [Built-in tools](#built-in-tools)
@@ -288,6 +289,30 @@ Tideline ships a **human-gated** self-improvement loop: propose changes from tel
 reviews its own behavior and curates/reviews skills from usage. Nothing that affects
 recall changes without passing the eval bar **and** a human approval. Throughout, the
 principle is the same: *independent verification, never the agent judging itself.*
+
+---
+
+## Shadow Partner: Desktop GUI
+
+**Shadow Partner** is a native, Spotlight-style desktop client dashboard for Brigade. It wraps the local command line engine in a premium, glassmorphic desktop interface, providing visual department supervision and control.
+
+```bash
+# Start the backend gateway engine inside main directory
+npm start
+
+# Open a second terminal and launch the desktop app
+cd desktop-client
+npm start
+```
+
+### Key Features
+
+*   **🖥️ Framed Window Desktop Client:** A standard operating system application window that integrates with the Windows taskbar, supports drag-to-move, and scales layouts dynamically when resized.
+*   **🤖 Active Crew Workers Grid:** A visual panel mapping active subagents (`lead-agent`, `research-agent`, `coding-agent`, `whatsapp-agent`) with real-time status lights. Includes a **🛑 Stop All Workers** safety abort button.
+*   **💻 Execution Logs Console:** A scrolling console that displays real-time subagent communications, handshakes, and delegation traces.
+*   **🧠 Tideline Memory Lens:** An interactive fact node visualizer displaying facts, trust scores, and typed graph links (`supersedes`/`contradicts`). Supports real-time node searches and committing new facts live.
+*   **🔌 Direct CLI Terminal Bridge:** Spawns `node brigade.mjs agent -m "<query>"` in the background and pipes live stdout/stderr text chunks directly into the UI chat bubbles.
+*   **⚡ Proof-of-Trust & Sandbox Simulators:** Quick action triggers to verify signed command hashes or dry-run subagent loops for infinite cycles and budget safety.
 
 ---
 
