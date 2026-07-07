@@ -10,6 +10,11 @@
   <div class="hud-container" id="hud-container">
     <div class="hud-glow"></div>
     
+    <!-- Gateway Connection Server Status Banner -->
+    <div class="server-status-banner offline" id="server-status-banner">
+      <span class="status-dot"></span> Gateway Server: Disconnected (Running in Demo Mode)
+    </div>
+
     <!-- Search Bar Section -->
     <div class="search-header">
       <div class="search-icon">🔍</div>
@@ -23,6 +28,14 @@
       <div class="mode-badge" id="mode-badge">Demo Mode</div>
     </div>
 
+    <!-- Crew Selector Bar -->
+    <div class="crew-bar">
+      <div class="crew-member active" data-agent="all">👥 Broadcast Crew</div>
+      <div class="crew-member" data-agent="research">🔬 Research Agent</div>
+      <div class="crew-member" data-agent="coding">💻 Coding Agent</div>
+      <div class="crew-member" data-agent="tideline">🧠 Tideline Memory</div>
+    </div>
+
     <!-- Main Scrollable Area -->
     <div class="content-area" id="content-area">
       <!-- Suggestion Rows (Context-Aware Action Cards) -->
@@ -33,6 +46,68 @@
       <!-- Chat View (Simulates streaming output) -->
       <div class="chat-container" id="chat-container">
         <!-- populated dynamically -->
+      </div>
+      
+      <!-- Tideline Lens Graph View -->
+      <div class="tideline-graph-view" id="tideline-graph-view">
+        <div class="graph-header">
+          <span>🧠 Tideline Memory Graph (BM25 + HRR Vector)</span>
+          <span style="font-size: 10px; color: var(--accent-purple);">provenance-gated</span>
+        </div>
+        <div class="graph-nodes" id="graph-nodes">
+          <!-- populated dynamically -->
+        </div>
+        <div class="add-memory-form">
+          <input type="text" id="new-memory-input" placeholder="Type a new fact to commit to Tideline memory..." />
+          <button id="btn-add-memory">Commit Fact</button>
+        </div>
+      </div>
+
+      <!-- Active Agent Workers Dashboard (NEW feature) -->
+      <div class="agent-worker-panel" id="agent-worker-panel">
+        <div class="worker-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="pulse-indicator"></span>
+            <span>🤖 Active Agent Workers</span>
+          </div>
+          <button class="btn-stop-workers" id="btn-stop-workers">🛑 Stop All Workers</button>
+        </div>
+        
+        <div class="workers-grid">
+          <div class="worker-card" id="card-lead">
+            <span class="worker-avatar">👑</span>
+            <div class="worker-details">
+              <span class="worker-name">lead-agent</span>
+              <span class="worker-status status-idle" id="status-lead">IDLE</span>
+            </div>
+          </div>
+          <div class="worker-card" id="card-research">
+            <span class="worker-avatar">🔬</span>
+            <div class="worker-details">
+              <span class="worker-name">research-agent</span>
+              <span class="worker-status status-idle" id="status-research">IDLE</span>
+            </div>
+          </div>
+          <div class="worker-card" id="card-coding">
+            <span class="worker-avatar">💻</span>
+            <div class="worker-details">
+              <span class="worker-name">coding-agent</span>
+              <span class="worker-status status-idle" id="status-coding">IDLE</span>
+            </div>
+          </div>
+          <div class="worker-card" id="card-whatsapp">
+            <span class="worker-avatar">💬</span>
+            <div class="worker-details">
+              <span class="worker-name">whatsapp-agent</span>
+              <span class="worker-status status-idle" id="status-whatsapp">IDLE</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="worker-logs-title">Execution Logs</div>
+        <div class="worker-logs-console" id="worker-logs-console">
+          <div class="log-line system">[system] Standing by for agent tasks...</div>
+        </div>
       </div>
     </div>
 
@@ -53,9 +128,9 @@
     <!-- Footer Controls -->
     <div class="hud-footer">
       <div class="footer-left">
-        <span>Press <kbd class="suggestion-shortcut">Esc</kbd> to hide</span>
-        <span>•</span>
         <span>Toggle: <kbd class="suggestion-shortcut">Ctrl+Shift+Space</kbd></span>
+        <span>•</span>
+        <span class="active-app-badge" id="active-app-badge">🎯 Active App: Google Chrome</span>
       </div>
       <div class="footer-link" id="gateway-link">
         🔗 localhost:7777

@@ -1,5 +1,5 @@
 {
-  "name": "brigade-shadow-partner",
+  "name": "brigade-shadow-hud",
   "version": "1.0.0",
   "description": "An OS-native, Spotlight-style glassmorphic HUD for the Spinabot Brigade gateway.",
   "main": "index.js",

@@ -10,61 +10,254 @@ const btnApprove = document.getElementById('btn-approve');
 const btnReject = document.getElementById('btn-reject');
 const modeBadge = document.getElementById('mode-badge');
 const gatewayLink = document.getElementById('gateway-link');
+const activeAppBadge = document.getElementById('active-app-badge');
+const crewMembers = document.querySelectorAll('.crew-member');
+const serverStatusBanner = document.getElementById('server-status-banner');
+
+// Tideline memory graph elements
+const tidelineGraphView = document.getElementById('tideline-graph-view');
+const graphNodes = document.getElementById('graph-nodes');
+const newMemoryInput = document.getElementById('new-memory-input');
+const btnAddMemory = document.getElementById('btn-add-memory');
+
+// Active Agent Workers Dashboard elements
+const agentWorkerPanel = document.getElementById('agent-worker-panel');
+const btnStopWorkers = document.getElementById('btn-stop-workers');
+const consoleLogs = document.getElementById('worker-logs-console');
+
+// Worker cards and status labels
+const cardLead = document.getElementById('card-lead');
+const cardResearch = document.getElementById('card-research');
+const cardCoding = document.getElementById('card-coding');
+const cardWhatsapp = document.getElementById('card-whatsapp');
+
+const statusLead = document.getElementById('status-lead');
+const statusResearch = document.getElementById('status-research');
+const statusCoding = document.getElementById('status-coding');
+const statusWhatsapp = document.getElementById('status-whatsapp');
 
 // App State
 let isLiveMode = false;
 let ws = null;
 let currentSuggestions = [];
 let activeSuggestionIndex = 0;
-let simulatedStep = 0; // Tracks the progress of the mock demo flow
+let currentAgentScope = 'all'; // 'all', 'research', 'coding', 'tideline'
 
-// Standard Mock suggestions (representing context-aware desktop states)
-const defaultSuggestions = [
+// Simulation Timers (to cancel them on "Stop Workers")
+let simulationTimers = [];
+let activeSimulationAction = null;
+
+// Simulated Desktop environments & focus states
+const apps = ['Google Chrome', 'VS Code', 'Command Prompt / Terminal'];
+let currentAppIndex = 0;
+
+// Local Mock Tideline Memory Facts List
+let mockMemories = [
   {
-    icon: '📄',
-    title: 'Summarize Chrome page: "Multi-Agent Systems"',
-    sub: 'Reads active tab metadata and passes to research-agent',
-    shortcut: 'Enter',
-    action: 'summarize-chrome'
+    text: "I keep a strict vegetarian diet.",
+    trust: "1.00",
+    relations: ["origin: owner", "preference"]
   },
   {
-    icon: '📁',
-    title: 'Scan active directory in VS Code',
-    sub: 'Checks workspace structures using coding-agent',
-    shortcut: '⌥D',
-    action: 'scan-directory'
+    text: "Ordered a custom portobello burger.",
+    trust: "0.95",
+    relations: ["supersedes: I keep a strict vegetarian diet.", "derived_from: wacli"]
   },
   {
-    icon: '🧠',
-    title: 'Recall tideline facts about "Ideathon"',
-    sub: 'Queries the hybrid local memory graph (BM25 + HRR)',
-    shortcut: '⌘M',
-    action: 'query-memory'
+    text: "Presenting the Shadow Partner overlay client at the Spinabot Ideathon.",
+    trust: "1.00",
+    relations: ["origin: owner", "context: 2026-07-07"]
+  },
+  {
+    text: "Voters love visual client overlay tools that are ready and runnable.",
+    trust: "0.85",
+    relations: ["origin: web-search", "relates: Presenting the Shadow Partner..."]
   }
 ];
 
+// Context suggestions by active app
+const contextSuggestions = {
+  'Google Chrome': [
+    {
+      icon: '💬',
+      title: 'Ask John on WhatsApp to return my book',
+      sub: 'Resolves contact via Tideline and commands wacli channel integration',
+      shortcut: 'Enter',
+      action: 'whatsapp-book',
+      scope: 'research'
+    },
+    {
+      icon: '📄',
+      title: 'Summarize Chrome page: "Multi-Agent Systems"',
+      sub: 'Reads active tab DOM and passes to research-agent',
+      shortcut: '⌥S',
+      action: 'summarize-chrome',
+      scope: 'research'
+    },
+    {
+      icon: '🧠',
+      title: 'Search Tideline memory for "multi-agent"',
+      sub: 'Queries local memory graph (BM25 + HRR)',
+      shortcut: '⌥M',
+      action: 'query-memory',
+      scope: 'tideline'
+    }
+  ],
+  'VS Code': [
+    {
+      icon: '📁',
+      title: 'Scan active project directory',
+      sub: 'Checks workspace workspace files using coding-agent',
+      shortcut: 'Enter',
+      action: 'scan-directory',
+      scope: 'coding'
+    },
+    {
+      icon: '🧪',
+      title: 'Run Sandbox Simulation',
+      sub: 'Diagnoses crew reporting hierarchy for loops and budget leaks',
+      shortcut: '⌥D',
+      action: 'sandbox',
+      scope: 'coding'
+    },
+    {
+      icon: '🛠️',
+      title: 'Run codebase check on "src/core/server.ts"',
+      sub: 'Resolves imports and checks syntax/types',
+      shortcut: '⌥C',
+      action: 'code-check',
+      scope: 'coding'
+    }
+  ],
+  'Command Prompt / Terminal': [
+    {
+      icon: '💬',
+      title: 'Ask John on WhatsApp to return my book',
+      sub: 'Resolves contact via Tideline and commands wacli channel integration',
+      shortcut: 'Enter',
+      action: 'whatsapp-book',
+      scope: 'research'
+    },
+    {
+      icon: '🔏',
+      title: 'View Cryptographic Audit Ledger',
+      sub: 'Verifies the Proof-of-Trust cryptographically signed actions list',
+      shortcut: '⌥A',
+      action: 'pot-ledger',
+      scope: 'coding'
+    },
+    {
+      icon: '🧠',
+      title: 'Recall command completions for "git"',
+      sub: 'Retrieves past successful git flows from memory',
+      shortcut: '⌥R',
+      action: 'query-memory',
+      scope: 'tideline'
+    }
+  ]
+};
+
 // Initialize UI
 function init() {
-  renderSuggestions(defaultSuggestions);
-  adjustWindowHeight();
+  updateContextUI();
   
   // Try connecting to the local Brigade Gateway
   connectToGateway();
+  
+  // Crew Selector Button Actions: Reset state and filter suggestions
+  crewMembers.forEach(member => {
+    member.addEventListener('click', () => {
+      crewMembers.forEach(m => m.classList.remove('active'));
+      member.classList.add('active');
+      currentAgentScope = member.getAttribute('data-agent');
+      
+      resetToSuggestions();
+      updateContextUI();
+    });
+  });
+
+  // Cycle Active App Badge Action
+  activeAppBadge.addEventListener('click', () => {
+    currentAppIndex = (currentAppIndex + 1) % apps.length;
+    resetToSuggestions();
+    updateContextUI();
+  });
+
+  // Manual Gateway Reconnect Action
+  gatewayLink.addEventListener('click', () => {
+    gatewayLink.textContent = '🔌 Reconnecting...';
+    gatewayLink.style.color = 'var(--accent-purple)';
+    connectToGateway();
+  });
+
+  // Toggle Mode Badge Action
+  modeBadge.addEventListener('click', () => {
+    if (!isLiveMode) {
+      setLiveState(true, true); // Force simulated live
+    } else {
+      setLiveState(false, false);
+    }
+    
+    resetToSuggestions();
+    updateContextUI();
+  });
+
+  // Tideline Graph Commit Memory button
+  btnAddMemory.addEventListener('click', commitNewFact);
+  newMemoryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commitNewFact();
+    }
+  });
+
+  // Stop active worker simulator button
+  btnStopWorkers.addEventListener('click', stopAllSimulationWorkers);
+}
+
+// Reset views back to suggestion lists
+function resetToSuggestions() {
+  chatContainer.style.display = 'none';
+  chatContainer.innerHTML = '';
+  approvalPanel.style.display = 'none';
+  tidelineGraphView.style.display = 'none';
+  searchInput.value = '';
+  searchInput.focus();
+}
+
+// Update UI based on active app focus and crew filters
+function updateContextUI() {
+  const currentApp = apps[currentAppIndex];
+  activeAppBadge.textContent = `🎯 Active App: ${currentApp}`;
+  
+  // If the Tideline tab is selected, render the graphical visualizer!
+  if (currentAgentScope === 'tideline') {
+    renderTidelineGraph();
+    return;
+  }
+  
+  // Get suggestions for the active app
+  let list = contextSuggestions[currentApp] || [];
+  
+  // Filter suggestions by selected agent scope
+  if (currentAgentScope !== 'all') {
+    list = list.filter(item => item.scope === currentAgentScope);
+  }
+  
+  renderSuggestions(list);
 }
 
 // Render Suggestions List
 function renderSuggestions(list) {
+  suggestionList.style.display = 'block';
+  tidelineGraphView.style.display = 'none';
   currentSuggestions = list;
   activeSuggestionIndex = 0;
   suggestionList.innerHTML = '';
   
   if (list.length === 0) {
-    suggestionList.style.display = 'none';
-    adjustWindowHeight();
+    suggestionList.innerHTML = `<li class="suggestion-item" style="color: var(--text-secondary); text-align: center; justify-content: center; font-size: 13px; pointer-events: none;">No context suggestions for this scope</li>`;
     return;
   }
-  
-  suggestionList.style.display = 'block';
   
   list.forEach((item, index) => {
     const li = document.createElement('li');
@@ -87,8 +280,58 @@ function renderSuggestions(list) {
     
     suggestionList.appendChild(li);
   });
+}
+
+// Render Tideline Lens memory graph
+function renderTidelineGraph() {
+  suggestionList.style.display = 'none';
+  chatContainer.style.display = 'none';
+  approvalPanel.style.display = 'none';
+  tidelineGraphView.style.display = 'flex';
   
-  adjustWindowHeight();
+  graphNodes.innerHTML = '';
+  
+  mockMemories.forEach(node => {
+    const div = document.createElement('div');
+    div.className = 'graph-node';
+    
+    let relationTags = '';
+    node.relations.forEach(rel => {
+      let cssClass = '';
+      if (rel.startsWith('supersedes:')) cssClass = 'supersedes';
+      else if (rel.startsWith('contradicts:')) cssClass = 'contradicts';
+      relationTags += `<span class="relation-tag ${cssClass}">${rel}</span>`;
+    });
+    
+    div.innerHTML = `
+      <div class="node-content-row">
+        <span class="node-text">${node.text}</span>
+        <span class="node-trust">trust: ${node.trust}</span>
+      </div>
+      <div class="node-relations">
+        ${relationTags}
+      </div>
+    `;
+    
+    graphNodes.appendChild(div);
+  });
+  
+  graphNodes.scrollTop = graphNodes.scrollHeight;
+}
+
+// Add new memory to mock list
+function commitNewFact() {
+  const text = newMemoryInput.value.trim();
+  if (text === '') return;
+  
+  mockMemories.push({
+    text: text,
+    trust: "1.00",
+    relations: ["origin: owner", "preference", "committed: recently"]
+  });
+  
+  newMemoryInput.value = '';
+  renderTidelineGraph();
 }
 
 // Adjust Suggestion selection highlight
@@ -107,37 +350,226 @@ function updateSuggestionHighlight() {
 // Select a suggestion and trigger action
 function selectSuggestion(item) {
   if (isLiveMode && ws && ws.readyState === WebSocket.OPEN) {
-    // In Live mode, send query to Gateway
     sendQueryToGateway(item.title);
   } else {
-    // Trigger simulated interaction
     runDemoSimulation(item);
   }
 }
 
+// Write to the worker console log
+function logConsole(sender, message, styleClass = 'system') {
+  const logLine = document.createElement('div');
+  logLine.className = `log-line ${styleClass}`;
+  
+  const now = new Date();
+  const timeStr = now.toTimeString().split(' ')[0];
+  
+  logLine.textContent = `[${timeStr}] [${sender}] ${message}`;
+  consoleLogs.appendChild(logLine);
+  consoleLogs.scrollTop = consoleLogs.scrollHeight;
+}
+
+// Reset the worker card statuses
+function resetWorkerCards() {
+  cardLead.className = 'worker-card';
+  cardResearch.className = 'worker-card';
+  cardCoding.className = 'worker-card';
+  cardWhatsapp.className = 'worker-card';
+
+  statusLead.className = 'worker-status status-idle';
+  statusLead.textContent = 'IDLE';
+  statusResearch.className = 'worker-status status-idle';
+  statusResearch.textContent = 'IDLE';
+  statusCoding.className = 'worker-status status-idle';
+  statusCoding.textContent = 'IDLE';
+  statusWhatsapp.className = 'worker-status status-idle';
+  statusWhatsapp.textContent = 'IDLE';
+}
+
 // Run interactive simulator for the ideathon
 function runDemoSimulation(item) {
+  // Clear any existing simulation timers first
+  stopAllSimulationWorkers();
+  activeSimulationAction = item.action;
+  
   suggestionList.style.display = 'none';
   chatContainer.style.display = 'flex';
   chatContainer.innerHTML = '';
   
   // User bubble
   appendChatBubble('user', `Query crew: "${item.title}"`);
-  adjustWindowHeight();
   
-  // Simulated Agent Stream bubble
+  if (item.action === 'whatsapp-book') {
+    // Launch the advanced WhatsApp simulation flow!
+    runWhatsAppSimulation();
+    return;
+  }
+  
+  // Simulated Agent Stream bubble for default simulations
   setTimeout(() => {
+    if (activeSimulationAction !== item.action) return; // cancelled
+    
     const responseText = getSimulatedResponse(item.action);
     const bubble = appendChatBubble('agent', '');
+    
+    // Light up lead agent card
+    cardLead.classList.add('active-run');
+    statusLead.textContent = 'RUNNING';
+    statusLead.className = 'worker-status status-running';
+    logConsole('lead-agent', `Initiated task: "${item.title}"`, 'lead');
+    
     typewriterEffect(bubble, responseText, () => {
       // Show approval gating panel after streaming response completes
+      cardLead.classList.remove('active-run');
+      statusLead.textContent = 'IDLE';
+      statusLead.className = 'worker-status status-idle';
+      
       if (item.action === 'summarize-chrome') {
         setTimeout(() => {
+          if (activeSimulationAction !== item.action) return;
           showApprovalPanel('npm install -g @spinabot/brigade');
+        }, 600);
+      } else if (item.action === 'code-check') {
+        setTimeout(() => {
+          if (activeSimulationAction !== item.action) return;
+          showApprovalPanel('npx tsx src/core/server.ts --check');
         }, 600);
       }
     });
   }, 500);
+}
+
+// Advanced WhatsApp Multi-Agent Simulation workflow
+function runWhatsAppSimulation() {
+  resetWorkerCards();
+  consoleLogs.innerHTML = '';
+  logConsole('system', 'Starting WhatsApp multi-agent crew execution loop...', 'system');
+  
+  // Step 1: Lead agent parses instruction
+  const t1 = setTimeout(() => {
+    cardLead.classList.add('active-run');
+    statusLead.textContent = 'RUNNING';
+    statusLead.className = 'worker-status status-running';
+    logConsole('lead-agent', 'Parsing request: "Ask John on WhatsApp to return my book"', 'lead');
+  }, 800);
+  simulationTimers.push(t1);
+
+  // Step 2: Lead delegates to WhatsApp agent
+  const t2 = setTimeout(() => {
+    cardLead.classList.remove('active-run');
+    statusLead.textContent = 'DELEGATED';
+    statusLead.className = 'worker-status status-running';
+    
+    cardWhatsapp.classList.add('active-run');
+    statusWhatsapp.textContent = 'RUNNING';
+    statusWhatsapp.className = 'worker-status status-running';
+    logConsole('lead-agent', 'Delegating message dispatch & contact resolution to whatsapp-agent.', 'lead');
+    logConsole('whatsapp-agent', 'Received delegation. Initiating contact resolution for name: "John"...', 'whatsapp');
+  }, 2200);
+  simulationTimers.push(t2);
+
+  // Step 3: WhatsApp agent queries Tideline Memory
+  const t3 = setTimeout(() => {
+    cardResearch.classList.add('active-run');
+    statusResearch.textContent = 'QUERYING';
+    statusResearch.className = 'worker-status status-running';
+    logConsole('whatsapp-agent', 'Checking Tideline Memory graphs for "John" contact details...', 'whatsapp');
+    logConsole('tideline-memory', 'Executing BM25 keyword match for query "John"...', 'tideline');
+  }, 3800);
+  simulationTimers.push(t3);
+
+  // Step 4: Tideline Memory returns John's contact info
+  const t4 = setTimeout(() => {
+    cardResearch.classList.remove('active-run');
+    statusResearch.textContent = 'IDLE';
+    statusResearch.className = 'worker-status status-idle';
+    logConsole('tideline-memory', 'Found fact: "John (WhatsApp: +91 98765 43210)" (Origin: owner-wacli, Trust: 0.95)', 'tideline');
+    logConsole('whatsapp-agent', 'Resolved contact path: +91 98765 43210. Drafting WhatsApp message payload...', 'whatsapp');
+  }, 5200);
+  simulationTimers.push(t4);
+
+  // Step 5: WhatsApp agent drafts message and requests approval
+  const t5 = setTimeout(() => {
+    cardWhatsapp.classList.remove('active-run');
+    statusWhatsapp.textContent = 'WAITING';
+    statusWhatsapp.className = 'worker-status status-waiting';
+    
+    logConsole('whatsapp-agent', 'Draft payload: "Hi John, Venu here. Could you please return my book when you get a chance?"', 'whatsapp');
+    logConsole('whatsapp-agent', 'Security policy rule wacli-message-approval requires user confirmation.', 'whatsapp');
+    logConsole('system', 'Execution paused. Waiting for operator approval...', 'system');
+    
+    // Trigger approval panel
+    showApprovalPanel('whatsapp send --to "+91 98765 43210" --msg "Hi John, could you please return my book?"');
+  }, 6800);
+  simulationTimers.push(t5);
+}
+
+// Complete the WhatsApp message simulation once user clicks Approve
+function approveWhatsAppMessage() {
+  approvalPanel.style.display = 'none';
+  logConsole('system', 'Operator APPROVED the command execution.', 'system');
+  
+  cardWhatsapp.classList.add('active-run');
+  statusWhatsapp.textContent = 'RUNNING';
+  statusWhatsapp.className = 'worker-status status-running';
+  logConsole('whatsapp-agent', 'Connecting to WhatsApp gateway socket adapter...', 'whatsapp');
+
+  const t1 = setTimeout(() => {
+    logConsole('whatsapp-agent', 'Handshake completed. Sending message payload to +91 98765 43210...', 'whatsapp');
+  }, 1200);
+  simulationTimers.push(t1);
+
+  const t2 = setTimeout(() => {
+    logConsole('whatsapp-agent', '✔ Message sent successfully! Status: Delivered.', 'whatsapp');
+    cardWhatsapp.classList.remove('active-run');
+    statusWhatsapp.textContent = 'SUCCESS';
+    statusWhatsapp.className = 'worker-status status-success';
+    
+    logConsole('tideline-memory', 'Writing to facts log: "Asked John to return my book on WhatsApp" (Provenance: owner, Trust: 1.00)', 'tideline');
+    
+    cardLead.classList.remove('active-run');
+    statusLead.textContent = 'SUCCESS';
+    statusLead.className = 'worker-status status-success';
+    logConsole('system', 'Workflow successfully completed. All subagents terminated cleanly.', 'system');
+    
+    // Show final response bubble in chat container
+    const bubble = appendChatBubble('agent', '');
+    typewriterEffect(bubble, `
+      <p style="color: var(--accent-emerald)"><strong>✔ WhatsApp Message Sent</strong></p>
+      <p>I have successfully contacted John on WhatsApp asking for your book back.</p>
+      <pre>Destination: +91 98765 43210\nContent: "Hi John, could you please return my book?"\nStatus: Sent (Delivered)</pre>
+      <p>A record has been committed to your Tideline memory.</p>
+    `);
+  }, 2800);
+  simulationTimers.push(t2);
+}
+
+// Stop all running simulations and set status to stopped (Stop Worker implementation)
+function stopAllSimulationWorkers() {
+  // Clear all running setTimeout timers
+  simulationTimers.forEach(timer => clearTimeout(timer));
+  simulationTimers = [];
+  activeSimulationAction = null;
+  
+  // Hide approval panel
+  approvalPanel.style.display = 'none';
+  
+  // Set cards to STOPPED status
+  const cards = [cardLead, cardResearch, cardCoding, cardWhatsapp];
+  const statuses = [statusLead, statusResearch, statusCoding, statusWhatsapp];
+  
+  cards.forEach(card => {
+    if (card) card.className = 'worker-card';
+  });
+  
+  statuses.forEach(status => {
+    if (status) {
+      status.textContent = 'STOPPED';
+      status.className = 'worker-status status-stopped';
+    }
+  });
+  
+  logConsole('system', '🛑 Stop Command Received. All running crew workers terminated.', 'error');
 }
 
 // Helper to append bubble
@@ -153,20 +585,17 @@ function appendChatBubble(sender, text) {
   `;
   
   chatContainer.appendChild(bubble);
-  adjustWindowHeight();
+  chatContainer.scrollTop = chatContainer.scrollHeight;
   return bubble.querySelector('.chat-bubble-content');
 }
 
 // Typewriter effect for streaming mock output
 function typewriterEffect(element, text, callback) {
   let index = 0;
-  // Speed of characters
   const speed = 15; 
   
-  // We can inject HTML elements directly to support structured text
   element.innerHTML = '';
   
-  // Use a temporary parser
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'text/html');
   const childNodes = Array.from(doc.body.childNodes);
@@ -175,7 +604,6 @@ function typewriterEffect(element, text, callback) {
   
   function nextNode() {
     if (currentChildIndex >= childNodes.length) {
-      adjustWindowHeight();
       if (callback) callback();
       return;
     }
@@ -190,7 +618,6 @@ function typewriterEffect(element, text, callback) {
         if (textIndex < node.textContent.length) {
           textSpan.textContent += node.textContent.charAt(textIndex);
           textIndex++;
-          adjustWindowHeight();
           setTimeout(typeText, speed);
         } else {
           currentChildIndex++;
@@ -199,11 +626,9 @@ function typewriterEffect(element, text, callback) {
       }
       typeText();
     } else {
-      // Element node - append directly for pre-formatted elements
       const clone = node.cloneNode(true);
       element.appendChild(clone);
       currentChildIndex++;
-      adjustWindowHeight();
       setTimeout(nextNode, speed * 5);
     }
   }
@@ -215,7 +640,7 @@ function typewriterEffect(element, text, callback) {
 function getSimulatedResponse(action) {
   if (action === 'summarize-chrome') {
     return `
-      <p><strong>[research-agent]</strong> Active Tab found: <em>"Multi-Agent Orchestration & Sovereignty"</em>.</p>
+      <p><strong>[research-agent]</strong> Active Tab found: <em>"Multi-Agent Systems"</em>.</p>
       <p>I have scanned the document text. Here is a summary of the core thesis:</p>
       <ul>
         <li><strong>Decentralization:</strong> Isolating agent state and hosting keys locally prevents middleman data harvesting.</li>
@@ -230,11 +655,39 @@ function getSimulatedResponse(action) {
       <pre>✔ src/core/server.ts (Port 7777 available)\n✔ src/tideline/ (Memory graph functional)\n✔ Local storage mode: Filesystem (JSONL)</pre>
       <p>No issues found. Your workspace is healthy and ready to run.</p>
     `;
+  } else if (action === 'code-check') {
+    return `
+      <p><strong>[coding-agent]</strong> Performing typecheck and dependency analysis on <code>src/core/server.ts</code>...</p>
+      <p>Identified 59 external module references. Resolving TypeScript definitions...</p>
+      <p>I require permission to execute the typecheck runner:</p>
+    `;
   } else if (action === 'query-memory') {
     return `
-      <p><strong>[tideline-memory]</strong> Recalling facts for query <em>"Ideathon"</em>:</p>
+      <p><strong>[tideline-memory]</strong> Recalling facts for query <em>"multi-agent"</em>:</p>
       <pre>Hit 1: [Origin: Owner] "I am presenting Brigade Shadow Partner at the spinabot ideathon on July 7, 2026." (Trust: 1.00)\nHit 2: [Origin: owner] "Voters prefer runnable desktop client ideas with visual demos." (Trust: 0.95)</pre>
       <p>Memory recall complete.</p>
+    `;
+  } else if (action === 'audit-logs') {
+    return `
+      <p><strong>[research-agent]</strong> Analyzing recent system terminal execution logs...</p>
+      <pre>Log: [2026-07-07T16:20:10Z] CMD: git status -> Exit: 0\nLog: [2026-07-07T16:21:40Z] CMD: npm install -> Exit: 0\nLog: [2026-07-07T16:22:15Z] CMD: npm start -> Exit: 1 (ENOENT: path.txt error)</pre>
+      <p>All recent failures have been resolved successfully.</p>
+    `;
+  } else if (action === 'sandbox') {
+    return `
+      <p><strong>[brigade-sandbox]</strong> Initializing crew reporting dry-run simulation...</p>
+      <pre>⚙ Parsing reporting hierarchy in org chart...\n🔬 Checking research-agent ➔ coding-agent delegation paths...\n🔄 Checking circular loops in subagent-policy.ts...\n💰 Auditing token allocation and token safety thresholds...</pre>
+      <p style="color: var(--accent-emerald)"><strong>✔ Simulation Status: SAFE</strong></p>
+      <ul>
+        <li><strong>Cycle status:</strong> No reporting cycles or infinite delegation loops found.</li>
+        <li><strong>Budget guard:</strong> Max task budget capped at $5.00. Threat scanner: ACTIVE.</li>
+      </ul>
+    `;
+  } else if (action === 'pot-ledger') {
+    return `
+      <p><strong>[proof-of-trust]</strong> Fetching signed local audit logs ledger:</p>
+      <pre>Hash: 0x8a1d...e3a0 [Approved: git status]\n  • Signer: Operator (Key: 0x6e00...)\n  • Verify status: VALID\n\nHash: 0xef10...6599 [Approved: npm install]\n  • Signer: Operator (Key: 0x6e00...)\n  • Verify status: VALID\n\nHash: 0x7c92...4102 [Blocked: rm -rf /]\n  • Signer: BLOCKED (Access violation)\n  • Verify status: FAILED (Policy vetoed)</pre>
+      <p>Ledger matches the local provenance database. Integrity: 100% verified.</p>
     `;
   }
   return '<p>Processing...</p>';
@@ -244,43 +697,83 @@ function getSimulatedResponse(action) {
 function showApprovalPanel(command) {
   approvalCommand.textContent = command;
   approvalPanel.style.display = 'flex';
-  adjustWindowHeight();
-  
-  // Shift focus to button
   btnApprove.focus();
 }
 
 // Handle Approval Accept
 function approveAction() {
-  approvalPanel.style.display = 'none';
-  adjustWindowHeight();
+  if (activeSimulationAction === 'whatsapp-book') {
+    approveWhatsAppMessage();
+    return;
+  }
   
+  approvalPanel.style.display = 'none';
+  
+  const cmd = approvalCommand.textContent;
   const bubble = appendChatBubble('agent', '');
-  typewriterEffect(bubble, `
-    <p style="color: var(--accent-emerald)"><strong>✔ Command Execution Approved</strong></p>
-    <p>Running: <code>npm install -g @spinabot/brigade</code>...</p>
-    <pre>added 142 packages, and audited 143 packages in 4s\n\nsuccess: @spinabot/brigade installed globally.</pre>
-    <p>Installation complete. Your Shadow Partner overlay is successfully connected!</p>
-  `, () => {
-    setTimeout(() => {
-      // Finish Demo
-      appendChatBubble('agent', '<p><em>Demo flow complete. Press Esc to exit overlay, or type a custom query.</em></p>');
-    }, 1000);
-  });
+  
+  if (cmd.includes('npm install')) {
+    typewriterEffect(bubble, `
+      <p style="color: var(--accent-emerald)"><strong>✔ Command Execution Approved</strong></p>
+      <p>Running: <code>npm install -g @spinabot/brigade</code>...</p>
+      <pre>added 142 packages, and audited 143 packages in 4s\n\nsuccess: @spinabot/brigade installed globally.</pre>
+      <p>Installation complete. Your Shadow Partner overlay is successfully connected!</p>
+    `, () => {
+      setTimeout(() => {
+        appendChatBubble('agent', '<p><em>Demo flow complete. Press Esc to exit overlay, or type a custom query.</em></p>');
+      }, 1000);
+    });
+  } else {
+    typewriterEffect(bubble, `
+      <p style="color: var(--accent-emerald)"><strong>✔ Command Execution Approved</strong></p>
+      <p>Running check command: <code>${cmd}</code>...</p>
+      <pre>✔ Typecheck passed: 0 compilation errors found.</pre>
+      <p>Operation complete.</p>
+    `, () => {
+      setTimeout(() => {
+        appendChatBubble('agent', '<p><em>Operation complete. Press Esc to exit.</em></p>');
+      }, 1000);
+    });
+  }
 }
 
 // Handle Approval Reject
 function rejectAction() {
   approvalPanel.style.display = 'none';
-  adjustWindowHeight();
+  
+  if (activeSimulationAction === 'whatsapp-book') {
+    logConsole('system', 'Operator REJECTED the WhatsApp dispatch command.', 'error');
+    cardWhatsapp.classList.remove('active-run');
+    statusWhatsapp.textContent = 'REJECTED';
+    statusWhatsapp.className = 'worker-status status-stopped';
+  }
+  
   appendChatBubble('agent', '<p style="color: var(--accent-rose)"><strong>✘ Command Execution Rejected</strong> by operator. Operation aborted.</p>');
 }
 
-// Dynamically adjust Electron Window Height based on content scroll height
-function adjustWindowHeight() {
-  const container = document.getElementById('hud-container');
-  const height = container.scrollHeight + 20; // add padding
-  ipcRenderer.send('set-height', height);
+// Set visual Live/Simulated Server status states in the UI
+function setLiveState(live, simulated = false) {
+  isLiveMode = live;
+  
+  if (live) {
+    modeBadge.textContent = 'Gateway Live';
+    modeBadge.classList.add('live');
+    
+    serverStatusBanner.textContent = `● Gateway Server: Connected (${simulated ? 'Simulated' : 'Active on Port 7777'})`;
+    serverStatusBanner.className = 'server-status-banner online';
+    
+    gatewayLink.textContent = `🔗 ws://localhost:7777 ${simulated ? '(Simulated)' : ''}`;
+    gatewayLink.style.color = 'var(--accent-emerald)';
+  } else {
+    modeBadge.textContent = 'Demo Mode';
+    modeBadge.classList.remove('live');
+    
+    serverStatusBanner.textContent = `● Gateway Server: Disconnected (Running in Demo Mode)`;
+    serverStatusBanner.className = 'server-status-banner offline';
+    
+    gatewayLink.textContent = '🔗 localhost:7777 (Offline)';
+    gatewayLink.style.color = 'var(--text-secondary)';
+  }
 }
 
 // WebSocket Connection to local Brigade Gateway
@@ -288,20 +781,11 @@ function connectToGateway() {
   ws = new WebSocket('ws://localhost:7777');
   
   ws.onopen = () => {
-    isLiveMode = true;
-    modeBadge.textContent = 'Gateway Live';
-    modeBadge.classList.add('live');
-    gatewayLink.textContent = '🔗 ws://localhost:7777';
-    gatewayLink.style.color = 'var(--accent-emerald)';
+    setLiveState(true, false);
   };
   
   ws.onclose = () => {
-    isLiveMode = false;
-    modeBadge.textContent = 'Demo Mode';
-    modeBadge.classList.remove('live');
-    gatewayLink.textContent = '🔗 localhost:7777 (Offline)';
-    gatewayLink.style.color = 'var(--text-secondary)';
-    // Retry in 10 seconds
+    setLiveState(false, false);
     setTimeout(connectToGateway, 10000);
   };
   
@@ -317,9 +801,7 @@ function connectToGateway() {
 
 // Handle inbound WebSocket messages from Gateway
 function handleGatewayMessage(msg) {
-  // Support Brigade protocol message shapes
   if (msg.type === 'agent_stream') {
-    // Stream text into chat view
     if (chatContainer.style.display !== 'flex') {
       suggestionList.style.display = 'none';
       chatContainer.style.display = 'flex';
@@ -328,9 +810,7 @@ function handleGatewayMessage(msg) {
     }
     const lastBubble = chatContainer.lastElementChild.querySelector('.chat-bubble-content');
     lastBubble.textContent += msg.content;
-    adjustWindowHeight();
   } else if (msg.type === 'approval_requested') {
-    // Show approval requested from actual gateway agent
     showApprovalPanel(msg.command || msg.payload);
   }
 }
@@ -374,16 +854,14 @@ searchInput.addEventListener('keydown', (e) => {
     if (suggestionList.style.display !== 'none' && currentSuggestions.length > 0) {
       selectSuggestion(currentSuggestions[activeSuggestionIndex]);
     } else if (searchInput.value.trim() !== '') {
-      // User typed custom query
       const queryText = searchInput.value.trim();
       searchInput.value = '';
       if (isLiveMode) {
         sendQueryToGateway(queryText);
       } else {
-        // Run demo simulation with custom text
         runDemoSimulation({
           title: queryText,
-          action: 'summarize-chrome' // default to demo summary
+          action: 'whatsapp-book' // default to the advanced whatsapp flow for type-ins
         });
       }
     }
@@ -393,16 +871,30 @@ searchInput.addEventListener('keydown', (e) => {
 // Search input live filtering
 searchInput.addEventListener('input', () => {
   const query = searchInput.value.toLowerCase().trim();
+  const currentApp = apps[currentAppIndex];
+  
+  if (currentAgentScope === 'tideline') {
+    const filteredNodes = mockMemories.filter(node => 
+      node.text.toLowerCase().includes(query)
+    );
+    renderFilteredTidelineGraph(filteredNodes);
+    return;
+  }
+  
+  let list = contextSuggestions[currentApp] || [];
+  
+  if (currentAgentScope !== 'all') {
+    list = list.filter(item => item.scope === currentAgentScope);
+  }
   
   if (query === '') {
-    renderSuggestions(defaultSuggestions);
+    renderSuggestions(list);
     chatContainer.style.display = 'none';
     approvalPanel.style.display = 'none';
     return;
   }
   
-  // Filter default suggestions based on search
-  const filtered = defaultSuggestions.filter(item => 
+  const filtered = list.filter(item => 
     item.title.toLowerCase().includes(query) || 
     item.sub.toLowerCase().includes(query)
   );
@@ -410,14 +902,48 @@ searchInput.addEventListener('input', () => {
   renderSuggestions(filtered);
 });
 
+// Render filtered nodes inside Tideline Graph
+function renderFilteredTidelineGraph(filteredList) {
+  graphNodes.innerHTML = '';
+  
+  if (filteredList.length === 0) {
+    graphNodes.innerHTML = `<div style="text-align: center; color: var(--text-secondary); margin-top: 50px; font-size: 13px;">No memories match your query</div>`;
+    return;
+  }
+  
+  filteredList.forEach(node => {
+    const div = document.createElement('div');
+    div.className = 'graph-node';
+    
+    let relationTags = '';
+    node.relations.forEach(rel => {
+      let cssClass = '';
+      if (rel.startsWith('supersedes:')) cssClass = 'supersedes';
+      else if (rel.startsWith('contradicts:')) cssClass = 'contradicts';
+      relationTags += `<span class="relation-tag ${cssClass}">${rel}</span>`;
+    });
+    
+    div.innerHTML = `
+      <div class="node-content-row">
+        <span class="node-text">${node.text}</span>
+        <span class="node-trust">trust: ${node.trust}</span>
+      </div>
+      <div class="node-relations">
+        ${relationTags}
+      </div>
+    `;
+    
+    graphNodes.appendChild(div);
+  });
+}
+
 // IPC messages from main process
 ipcRenderer.on('window-shown', () => {
   searchInput.value = '';
-  renderSuggestions(defaultSuggestions);
+  updateContextUI();
   chatContainer.style.display = 'none';
   approvalPanel.style.display = 'none';
   searchInput.focus();
-  adjustWindowHeight();
 });
 
 // Button events
@@ -430,24 +956,6 @@ approvalPanel.addEventListener('keydown', (e) => {
     approveAction();
   } else if (e.key === 'Escape') {
     rejectAction();
-  }
-});
-
-// Toggle badge mode manually if clicked (for demo purposes)
-modeBadge.addEventListener('click', () => {
-  if (!isLiveMode) {
-    // Force toggle to mock live gateway state
-    isLiveMode = true;
-    modeBadge.textContent = 'Gateway Live';
-    modeBadge.classList.add('live');
-    gatewayLink.textContent = '🔗 ws://localhost:7777 (Simulated)';
-    gatewayLink.style.color = 'var(--accent-emerald)';
-  } else {
-    isLiveMode = false;
-    modeBadge.textContent = 'Demo Mode';
-    modeBadge.classList.remove('live');
-    gatewayLink.textContent = '🔗 localhost:7777';
-    gatewayLink.style.color = 'var(--text-secondary)';
   }
 });
 

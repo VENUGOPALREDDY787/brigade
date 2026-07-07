@@ -3,24 +3,49 @@ const path = require('path');
 
 let mainWindow = null;
 
+// Request single instance lock to prevent "Access is denied" cache conflicts
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // If another instance is already running, quit this one immediately
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Focus the existing window if a user tries to launch a second one
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    createWindow();
+
+    // Toggle shortcut
+    const ret = globalShortcut.register('CommandOrControl+Shift+Space', () => {
+      toggleWindow();
+    });
+
+    if (!ret) {
+      console.log('Shortcut registration failed');
+    }
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
+
 function createWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-
-  // Initial window size
-  const windowWidth = 720;
-  const windowHeight = 480;
-
   mainWindow = new BrowserWindow({
-    width: windowWidth,
-    height: windowHeight,
-    x: Math.round((screenWidth - windowWidth) / 2),
-    y: Math.round(screenHeight * 0.15), // Show it near the top of the screen
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
+    width: 900,
+    height: 700,
+    frame: true,
+    transparent: false,
+    alwaysOnTop: false,
+    skipTaskbar: false,
+    resizable: true,
     show: false,
     webPreferences: {
       nodeIntegration: true,
@@ -29,73 +54,25 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
+  mainWindow.center();
 
-  // Hide the window when it loses focus (blur)
-  mainWindow.on('blur', () => {
-    hideWindow();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 }
 
 function toggleWindow() {
   if (!mainWindow) return;
 
-  if (mainWindow.isVisible() && mainWindow.isFocused()) {
-    hideWindow();
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
   } else {
-    showWindow();
+    mainWindow.show();
+    mainWindow.focus();
   }
 }
-
-function showWindow() {
-  if (!mainWindow) return;
-  mainWindow.show();
-  mainWindow.focus();
-  mainWindow.webContents.send('window-shown');
-}
-
-function hideWindow() {
-  if (!mainWindow) return;
-  mainWindow.hide();
-  mainWindow.webContents.send('window-hidden');
-}
-
-app.whenReady().then(() => {
-  createWindow();
-
-  // Register global shortcut Ctrl+Shift+Space
-  const ret = globalShortcut.register('CommandOrControl+Shift+Space', () => {
-    toggleWindow();
-  });
-
-  if (!ret) {
-    console.log('Registration failed');
-  }
-
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-// IPC listeners from renderer
-ipcMain.on('hide-window', () => {
-  hideWindow();
-});
-
-// IPC listener to dynamically change height based on UI content
-ipcMain.on('set-height', (event, height) => {
-  if (mainWindow) {
-    const bounds = mainWindow.getBounds();
-    mainWindow.setBounds({
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: height
-    });
-  }
-});
 
 app.on('will-quit', () => {
-  // Unregister all shortcuts
   globalShortcut.unregisterAll();
 });
 
