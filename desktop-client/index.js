@@ -44,7 +44,7 @@ function createWindow() {
     alwaysOnTop: false,
     skipTaskbar: false,
     resizable: true,
-    show: false,
+    show: true, // Show immediately on launch
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -53,10 +53,6 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
   mainWindow.center();
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
 }
 
 function toggleWindow() {

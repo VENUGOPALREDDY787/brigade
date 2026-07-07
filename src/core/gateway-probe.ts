@@ -241,8 +241,10 @@ export async function probeGateway(opts: GatewayProbeOptions = {}): Promise<Gate
       if (settled) return;
       settled = true;
       try {
-        ws.removeAllListeners();
+        // Prevent unhandled error event crashes during closing connection handshake
+        ws.on("error", () => {});
         ws.close();
+        ws.removeAllListeners();
       } catch {
         // Best-effort; the listener cleanup runs anyway.
       }
