@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brigade Shadow Partner</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="hud-container" id="hud-container">
+    <div class="hud-glow"></div>
+    
+    <!-- Search Bar Section -->
+    <div class="search-header">
+      <div class="search-icon">🔍</div>
+      <input 
+        type="text" 
+        class="search-input" 
+        id="search-input" 
+        placeholder="Type to query crew, search memory or select action..."
+        autofocus
+      >
+      <div class="mode-badge" id="mode-badge">Demo Mode</div>
+    </div>
+
+    <!-- Main Scrollable Area -->
+    <div class="content-area" id="content-area">
+      <!-- Suggestion Rows (Context-Aware Action Cards) -->
+      <ul class="suggestion-list" id="suggestion-list">
+        <!-- populated dynamically -->
+      </ul>
+
+      <!-- Chat View (Simulates streaming output) -->
+      <div class="chat-container" id="chat-container">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Approval Action Gating Panel -->
+    <div class="approval-panel" id="approval-panel">
+      <div class="approval-header">
+        ⚠️ Approval Required
+      </div>
+      <div class="approval-command" id="approval-command">
+        git push origin main
+      </div>
+      <div class="approval-actions">
+        <button class="btn btn-reject" id="btn-reject">Reject</button>
+        <button class="btn btn-approve" id="btn-approve">Approve (Enter)</button>
+      </div>
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="hud-footer">
+      <div class="footer-left">
+        <span>Press <kbd class="suggestion-shortcut">Esc</kbd> to hide</span>
+        <span>•</span>
+        <span>Toggle: <kbd class="suggestion-shortcut">Ctrl+Shift+Space</kbd></span>
+      </div>
+      <div class="footer-link" id="gateway-link">
+        🔗 localhost:7777
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

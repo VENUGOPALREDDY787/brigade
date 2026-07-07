@@ -1,0 +1,20 @@
+{
+  "name": "brigade-shadow-partner",
+  "version": "1.0.0",
+  "description": "An OS-native, Spotlight-style glassmorphic HUD for the Spinabot Brigade gateway.",
+  "main": "index.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "brigade",
+    "desktop-hud",
+    "ai-agent",
+    "overlay"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}
